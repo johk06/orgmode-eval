@@ -3,6 +3,7 @@ local M = {}
 local uv = vim.uv
 local util = require("orgmode-eval.util")
 local ui = require("orgmode-eval.ui")
+local config = require("orgmode-eval.opts").config
 
 local gettime = util.gettime
 
@@ -50,7 +51,6 @@ end)
 ---@alias OrgEvalProgressCb fun(res: OrgEvalUpdate)
 ---@alias OrgEvalEvaluator fun(block: OrgEvalBlock, cb: OrgEvalDoneCb, upd: OrgEvalProgressCb)
 
-
 ---@type OrgEvalEvaluator
 local nvim_lua_evaluator
 do
@@ -83,22 +83,43 @@ do
         end
     end
 
+    ---@type OrgEvalEvaluator
     nvim_lua_evaluator = function(block, cb, upd)
         local source = table.concat(block.block:get_content(), "\n")
         local chunk_name = block.block:get_name() or "Lua"
 
+        upd {
+            event = "start",
+            stage = "prepare",
+            time = gettime(),
+            block = block,
+        }
         local on_error = get_error_handler(chunk_name)
         local chunk, err = load(source, "@" .. chunk_name)
+
+        local load_error
         if not chunk then
             local lnum, msg = on_error(err --[[@as string]])
-            cb {
+            load_error = {
                 result = "error",
                 error_stage = "compile",
                 errors = { { tonumber(lnum), msg } },
                 block = block,
             }
+        end
+
+        upd {
+            event = "done",
+            stage = "prepare",
+            time = gettime(),
+            block = block,
+        }
+
+        if load_error then
+            cb(load_error)
             return
         end
+        ---@cast chunk function
 
         local env = block.environ --[[@as table]]
         local messages = {}
@@ -188,7 +209,9 @@ local make_stdio_evaluator = function(cmd, error_pattern)
             event = "start",
             time = gettime()
         }
-        vim.system(cmd, {
+        local full_cmd = vim.list_extend({}, cmd)
+        vim.list_extend(full_cmd, block.args)
+        vim.system(full_cmd, {
             stdin = block.block:get_content(),
             clear_env = block.clear_environ,
             env = not vim.tbl_isempty(block.environ) and block.environ or nil,
@@ -228,16 +251,16 @@ local make_stdio_evaluator = function(cmd, error_pattern)
     end
 end
 
----@param compiler (string|boolean)[]
+---@param compiler string[]
 ---@param input string
 ---@param output string
 ---@return string[]
 local format_compiler_name = function(compiler, input, output)
     local out = {}
     for _, field in ipairs(compiler) do
-        if field == true then
+        if field == "{input}" then
             out[#out + 1] = input
-        elseif field == false then
+        elseif field == "{output}" then
             out[#out + 1] = output
         else
             out[#out + 1] = field
@@ -251,7 +274,8 @@ end
 ---@param block OrgEvalBlock
 ---@param cb OrgEvalDoneCb
 local execute_program = function(program, block, cb)
-    vim.system(vim.list_extend({ program }, block.args), {
+    local command = vim.list_extend({ program }, block.args)
+    vim.system(command, {
         env = block.environ,
         clear_env = block.clear_environ,
     }, function(out)
@@ -292,6 +316,7 @@ local check_compilation_result = function(out, block, error_pattern, cb, upd)
         vim.schedule(function()
             local errors, stderr = nil, compiler_out.stderr
             if error_pattern and stderr then
+                ---@diagnostic disable-next-line: cast-local-type
                 errors, stderr = collect_error_format(stderr, error_pattern)
             end
             cb {
@@ -323,8 +348,8 @@ local check_compilation_result = function(out, block, error_pattern, cb, upd)
     end
 end
 
----@param cmd (string|boolean)[]
----@param extension string
+---@param cmd string[]
+---@param extension string?
 ---@param error_pattern string?
 ---@return OrgEvalEvaluator
 local make_compiler_evaluator = function(cmd, extension, error_pattern)
@@ -361,39 +386,73 @@ local make_compiler_evaluator = function(cmd, extension, error_pattern)
     end
 end
 
-M.evaluators = {
-    nvim_lua = nvim_lua_evaluator,
-    identity = identity_evaluator,
-    shell = make_stdio_evaluator({ "bash" }, "^bash: line (%d+): (.*)"),
-    python = make_stdio_evaluator({ "python" }),
-    system_lua = make_stdio_evaluator({ "lua" }),
-    gcc = make_compiler_evaluator({ "gcc", true, "-o", false }, ".c", "^%S-:(%d+):%d+: error: (.*)")
-}
+---@param name string
+---@param callback OrgEvalEvaluator
+---@param languages string[]? Automatically register for languages
+M.register_evaluator = function(name, callback, languages)
+    M.evaluators[name] = callback
+    if languages then
+        for _, lang in ipairs(languages) do
+            config.evaluators[lang] = name
+        end
+    end
+end
 
+---@param name string
+---@param command string[]
+---@param opts {error_pattern: string?, languages: string[]?}
+M.register_interpreter = function(name, command, opts)
+    M.register_evaluator(name, make_stdio_evaluator(command, opts.error_pattern), opts.languages)
+end
+
+---@param name string
+---@param command (string|boolean)[]
+---@param opts {file_extension: string, error_pattern: string?, languages: string[]?}
+M.register_compiler = function(name, command, opts)
+    M.register_evaluator(name, make_compiler_evaluator(command, opts.file_extension, opts.error_pattern), opts.languages)
+end
+
+-- Defaults {{{
 ---@type table<string, OrgEvalEvaluator>
-local per_filetype = {
-    text = identity_evaluator,
-    lua = nvim_lua_evaluator,
-    bash = M.evaluators.shell,
-    python = M.evaluators.python,
-    c = M.evaluators.gcc,
-}
+M.evaluators = {}
 
-M.per_type = per_filetype
+M.register_evaluator("identity", identity_evaluator, { "text" })
+M.register_evaluator("nvim_lua", nvim_lua_evaluator, { "lua" })
+
+M.register_interpreter("system_lua", { "lua", "-" }, {})
+M.register_interpreter("bash", { "bash", "-s" }, {
+    error_pattern = "^bash: line (%d+): (.*)",
+    languages = { "bash" }
+})
+M.register_interpreter("python", { "python" }, {
+    languages = { "python", "-" }
+})
+
+M.register_compiler("gcc", { "gcc", "{input}", "-o", "{output}" }, {
+    file_extension = ".c",
+    error_pattern = "^%S-:(%d+):%d+: error: (.*)",
+    languages = { "c" }
+})
+-- }}}
 
 ---@param block OrgEvalBlock
 ---@param cb OrgEvalDoneCb
 ---@param upd OrgEvalProgressCb
 M.evaluate = function(block, cb, upd)
-    local evaluator = per_filetype[block.lang]
+    local evaluator = config.evaluators[block.lang]
     if not evaluator then
-        vim.notify("[Org] No evaluator for " .. block.lang, vim.log.levels.ERROR)
+        util.error("No evaluator for " .. block.lang)
+        return
+    end
+    local eval_func = M.evaluators[evaluator]
+    if not eval_func then
+        util.error("Not a valid evaluator: " .. evaluator)
         return
     end
 
     vim.api.nvim_buf_clear_namespace(block.buf, ui.highlights, block.lnum, block.end_lnum)
     block.total_time = {}
-    evaluator(block, cb, upd)
+    eval_func(block, cb, upd)
 end
 
 return M

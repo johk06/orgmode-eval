@@ -12,6 +12,7 @@ local M = {}
 
 ---@class OrgEvalConfig
 ---@field output OrgEvalConfigUi
+---@field evaluators table<string, string>
 
 ---@type OrgEvalConfig
 local defaults = {
@@ -24,7 +25,8 @@ local defaults = {
         error_highlight = "DiagnosticError",
         info_highlight = "DiagnosticHint",
         time_highlight = "SpecialChar",
-    }
+    },
+    evaluators = { }
 }
 
 ---@type OrgEvalConfig

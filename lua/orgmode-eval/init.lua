@@ -23,4 +23,8 @@ end
 
 M.setup = require("orgmode-eval.opts").setup
 
+M.register = eval.register_evaluator
+M.register_compiler = eval.register_compiler
+M.register_interpreter = eval.register_interpreter
+
 return M

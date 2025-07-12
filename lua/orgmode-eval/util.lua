@@ -7,4 +7,8 @@ M.gettime = function()
     return total
 end
 
+M.error = function(message)
+    vim.notify(("[org-eval] %s"):format(message), vim.log.levels.ERROR)
+end
+
 return M

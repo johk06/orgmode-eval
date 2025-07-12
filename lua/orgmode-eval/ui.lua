@@ -128,9 +128,11 @@ local add_stream_with_prefix = function(dst, stream, prefix, heading_prefix, tit
                 })
                 break
             end
-            table.insert(dst, {
-                prefix, { line, opts.highlight }
-            })
+            if not (i == #output and #line == 0) then
+                table.insert(dst, {
+                    prefix, { line, opts.highlight }
+                })
+            end
         end
     end
 end
