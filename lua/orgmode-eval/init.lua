@@ -11,7 +11,7 @@ M.run_code_block = function()
     if not block then
         return
     end
-    eval.evaluate(block, ui.display_evaluation_result)
+    eval.evaluate(block, ui.display_evaluation_result, ui.update_in_progress)
 end
 
 M.clear_buffer = function(buf)

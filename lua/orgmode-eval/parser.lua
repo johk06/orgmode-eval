@@ -44,6 +44,13 @@ local parse_arg_vector = function(str)
 end
 
 
+---@param str string?
+---@param default boolean
+---@return boolean
+local parse_arg_bool = function(str, default)
+    return str and (str == "true" or str == "yes") or default
+end
+
 ---@return OrgEvalBlock?
 M.get_parsed_current_block = function()
     local file = org.files:get_current_file()
@@ -53,13 +60,18 @@ M.get_parsed_current_block = function()
     end
 
     local args = block:get_header_args()
+    local srow, scol, erow, ecol = block.node:range()
     ---@type OrgEvalBlock
     local parsed = {
+        buf = block.file:bufnr(),
+        lnum = srow,
+        end_lnum = erow,
         block = block,
         lang = block:get_language() or "text" --[[@as string]],
         output_format = args[":out"] or "plain",
-        argv = args[":argv"] and parse_arg_vector(args[":argv"]) or {},
+        args = args[":args"] and parse_arg_vector(args[":args"]) or {},
         environ = args[":env"] and parse_env_vector(args[":env"]) or {},
+        clear_environ = parse_arg_bool(args[":clear-env"], false)
     }
 
     return parsed
