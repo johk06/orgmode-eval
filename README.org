@@ -36,8 +36,8 @@ vim.api.nvim_create_autocommand("FileType", {
     }),
     callback = function(event)
         local org_eval = require"orgmode-eval"
-        vim.keymap.set("n", "<localleader>oe", org_eval.run_code_block)
-        vim.keymap.set("n", "<localleader>oE", org_eval.clear_buffer)
+        vim.keymap.set("n", "<localleader>oe", org_eval.run_code_block, { buffer = event.buf })
+        vim.keymap.set("n", "<localleader>oE", org_eval.clear_buffer, { buffer = event.buf })
     end
 })
 #+end_src
@@ -125,7 +125,7 @@ For full control, simply write a function that implements the
 and register it using =org_eval.register=.
 Two callbacks will be provided to your function
 (they both need to run in the main neovim event loop, so schedule them using =vim.schedule= if in an =:h api-fast= context):
-***** OrgEvalDoneCb
+***** =OrgEvalDoneCb=
 Call this function once your evaluator is fully done, this will cause the display of output,
 error messages and total runtime.
 ***** =OrgEvalProgressCb=
