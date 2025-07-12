@@ -1,0 +1,134 @@
+* Orgmode-Eval
+
+[[./assets/screenshot.png]]
+
+Simple way to evaluate code blocks in [[https://github.com/nvim-orgmode/orgmode/tree/master][nvim-orgmode]] and see output, runtime and possible errors.
+
+** Features
+- Run codeblocks under cursor
+- Specify arguments and environment variables
+- Quickly create evaluators for most programming languages
+- Check process runtime, results and errors
+
+** Setup
+*** Requirements
+- [[https://github.com/nvim-orgmode/orgmode/tree/master][nvim-orgmode]]
+
+*** Installation
+Any plugin manager should work.
+
+Using [[https://github.com/folke/lazy.nvim][lazy.nvim]]:
+#+begin_src lua
+---@type LazySpec
+return {
+    "johk06/orgmode-eval",
+    -- Leave blank for defaults
+    opts = {},
+}
+#+end_src
+
+Orgmode-Eval does not create any keybindings for you, you can do that
+yourself in a =FileType= autocommand:
+#+begin_src lua
+vim.api.nvim_create_autocommand("FileType", {
+    pattern = "org",
+    group = vim.api.nvim_create_augroup("org-keymappings", { clear = true
+    }),
+    callback = function(event)
+        local org_eval = require"orgmode-eval"
+        vim.keymap.set("n", "<localleader>oe", org_eval.run_code_block)
+        vim.keymap.set("n", "<localleader>oE", org_eval.clear_buffer)
+    end
+})
+#+end_src
+
+** Usage
+When on a source block, call =org_eval.run_code_block=.
+The code will be run using the configured evaluator.
+
+*** Default evaluators
+**** =lua-nvim=
+:PROPERTIES:
+:CUSTOM_ID: lua-nvim
+:END:
+Evaluates lua within your current neovim instance,
+so it has access to all your variables and can modify the editor state.
+This may not be desirable for code that sleeps or does work using libuv,
+since that will escape the context used for tracking it.
+**** =identity=
+Returns the blocks contents verbatim, mainly for testing purposes.
+**** =gcc=
+Compiles and runs C source code (Note: currently a =main= function is
+necessary)
+**** =bash=, =python=, =lua-system=
+These run their respective scripting languages via =stdin=.
+
+*** Parameters and environment
+This plugin makes use of three special arguments in the block header.
+All of these will expand environment variables similar to the shell,
+shell-like word splitting is applied:
+- =word\ space "word space" 'word space'= will be passed as three identical arguments.
+- =$PATH= or =${PATH}= will insert the literal contents of that environment variable.
+- The special variable =$FILE= will expand to the current file.
+**** ~:env NAME=VALUE~
+Sets environment variables for external processes.
+Specifying a name without a value causes it to be included from the default environment.
+For [[#lua-nvim][lua-nvim]] this affects the chunk's environment (see =:h setfenv= ).
+All values are strings, support for different types is planed for neovim lua only.
+**** ~:clear-env t~
+Clears the environment so no environment variables are inherited.
+For [[#lua-nvim][lua-nvim]], this makes all globals like =vim= invisible.
+Any of =true=, =t=, =yes= and =y= is considered truthy.
+**** ~:args ARG1 ARG2~
+Set the command line arguments in the case of an external process.
+For [[#lua-nvim][lua-nvim]], the values are available in the global =arg=
+array, like in a standalone lua interpreter.
+
+*** Adding further evaluators
+An evaluator is just a function that takes in a pre-parsed context and
+executes it.
+
+There are three options when adding a new evaluator:
+**** =org_eval.register_interpreter=
+The interpreter should take a list of strings on stdin and write the
+results to stdout.
+This should work for most interpreted languages.
+As an example, consider the definition of the builtin =bash= evaluator:
+#+begin_src lua
+org_eval.register_interpreter("bash", { "bash", "-" }, {
+    -- use the evaluator for these languages
+    languages = { "bash" },
+    -- should specify two captures, line number and error message
+    -- lines matching this pattern will be filtered from standard error
+    -- if the process exits with non-0
+    -- and displayed as neovim diagnostics
+    error_pattern = "^bash: line (%d+): (.*)",
+})
+#+end_src
+
+**** =org_eval.register_compiler=
+This takes care of a two-step compile and run process.
+Compiler error messages can be matched the same way as interpreter ones.
+#+begin_src lua
+-- {input} and {output} will be replaced with the appropriate paths
+org_eval.register_compiler("gcc", { "gcc", "{input}", "-o", "{output}" }, {
+    -- to use for the input file
+    file_extension = ".c",
+    error_pattern = "^%S-:(%d+):%d+: error: (.*)",
+    languages = { "c" }
+})
+#+end_src
+
+**** Custom =OrgEvalEvaluator=
+For full control, simply write a function that implements the
+=OrgEvalEvaluator= type
+and register it using =org_eval.register=.
+Two callbacks will be provided to your function
+(they both need to run in the main neovim event loop, so schedule them using =vim.schedule= if in an =:h api-fast= context):
+***** OrgEvalDoneCb
+Call this function once your evaluator is fully done, this will cause the display of output,
+error messages and total runtime.
+***** =OrgEvalProgressCb=
+Used to mark at which step in the execution you are and how long the last step took.
+At least one call with ~event = "start"~ and ~event = "done"~ is required to get timings to show up.
+If your evaluator has a multi step process (like a configure-compile-run cycle), those stages can be cleanly delimited.

@@ -419,9 +419,9 @@ end
 M.evaluators = {}
 
 M.register_evaluator("identity", identity_evaluator, { "text" })
-M.register_evaluator("nvim_lua", nvim_lua_evaluator, { "lua" })
+M.register_evaluator("lua-nvim", nvim_lua_evaluator, { "lua" })
 
-M.register_interpreter("system_lua", { "lua", "-" }, {})
+M.register_interpreter("lua-system", { "lua", "-" }, {})
 M.register_interpreter("bash", { "bash", "-s" }, {
     error_pattern = "^bash: line (%d+): (.*)",
     languages = { "bash" }
