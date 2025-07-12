@@ -2,6 +2,7 @@ local M = {}
 
 ---@class OrgEvalConfigUi
 ---@field max_lines integer
+---@field max_inline_length integer
 ---@field prefix string
 ---@field prefix_highlight string
 ---@field highlight string
@@ -18,6 +19,7 @@ local M = {}
 local defaults = {
     output = {
         max_lines = 10,
+        max_inline_length = 20,
         highlight = "Comment",
         prefix = "%s> ",
         prefix_highlight = "Comment",

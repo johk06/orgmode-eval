@@ -187,7 +187,23 @@ M.display_evaluation_result = function(res)
         add_stream_with_prefix(lines, res.stderr, plain_prefix, prefix, { "Errors", opts.error_highlight })
     end
     if res.stdout and #res.stdout > 0 then
-        add_stream_with_prefix(lines, res.stdout, plain_prefix, prefix, { "Output", opts.info_highlight })
+        if res.output_style == "inline" then
+            for i, line in ipairs(res.stdout --[[@as string[] ]]) do
+                local len = vim.fn.strdisplaywidth(line)
+                if len == 0 then
+                elseif len > opts.max_inline_length then
+                    api.nvim_buf_set_extmark(buf, ns, block.lnum + i, 0, {
+                        virt_lines = { { { padding }, { line, opts.highlight } } },
+                    })
+                else
+                    api.nvim_buf_set_extmark(buf, ns, block.lnum + i, 0, {
+                        virt_text = { { line, opts.highlight } },
+                    })
+                end
+            end
+        else
+            add_stream_with_prefix(lines, res.stdout, plain_prefix, prefix, { "Output", opts.info_highlight })
+        end
     end
     api.nvim_buf_set_extmark(buf, ns, block.end_lnum - 1, 0, {
         virt_lines = lines

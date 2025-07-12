@@ -9,6 +9,8 @@ Simple way to evaluate code blocks in [[https://github.com/nvim-orgmode/orgmode/
 - Specify arguments and environment variables
 - Quickly create evaluators for most programming languages
 - Check process runtime, results and errors
+- Allow for plain and inline output
+
 
 ** Setup
 *** Requirements
@@ -62,6 +64,10 @@ Compiles and runs C source code (Note: currently a =main= function is
 necessary)
 **** =bash=, =python=, =lua-system=
 These run their respective scripting languages via =stdin=.
+**** =math-qalc=
+Evaluates mathematical expressions using the [[https://github.com/Qalculate/libqalculate][qalc]] command line tool.
+Qalc supports a wide variety of mathematical operations.
+Output is displayed inline.
 
 *** Parameters and environment
 This plugin makes use of three special arguments in the block header.

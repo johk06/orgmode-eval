@@ -35,6 +35,7 @@ end)
 ---@field error_stage OrgEvalStage?
 ---@field exitcode integer?
 ---@field stdout (string|string[])?
+---@field output_style "plain"|"inline"?
 ---@field stderr (string|string[])?
 ---@field errors {[1]: integer, [2]: string}[]?
 
@@ -161,6 +162,7 @@ do
 
         if ok then
             cb {
+
                 block = block,
                 result = "ok",
                 stdout = messages,
@@ -169,6 +171,60 @@ do
             cb(error_result)
         end
     end
+end
+
+---@type OrgEvalEvaluator
+local qalc_evaluator = function(block, cb, upd)
+    upd {
+        block = block,
+        stage = "run",
+        event = "start",
+        time = gettime()
+    }
+
+    local lines = block.block:get_content()
+    local line_has_result = vim.tbl_map(function(l)
+        return not (l:match("^%s*$") or l:match("^%s*#"))
+    end, lines)
+
+    vim.system({ "qalc", "-t", "-f", "-" }, {
+        stdin = lines,
+    }, function(out)
+        ---@type OrgEvalResult
+        ---@diagnostic disable-next-line: missing-fields
+        local res = {
+            block = block,
+            exitcode = out.code,
+            stderr = out.stderr
+        }
+        if out.code ~= 0 then
+            res.result = "error"
+        else
+            local output = vim.split(out.stdout, "\n")
+            local line_results = {}
+            local index = 1
+            for i, has_res in ipairs(line_has_result) do
+                if has_res then
+                    line_results[i] = "= " .. output[index]
+                    index = index + 1
+                else
+                    line_results[i] = ""
+                end
+            end
+            res.stdout = line_results
+            res.output_style = "inline"
+        end
+
+        sched(function()
+            upd {
+                block = block,
+                stage = "run",
+                event = "done",
+                time = gettime()
+            }
+            cb(res)
+        end)
+    end)
 end
 
 ---@type OrgEvalEvaluator
@@ -203,7 +259,7 @@ end
 ---@param cmd string[]
 ---@param error_pattern string? Regex that captures the line and error message
 ---@return OrgEvalEvaluator
-local make_stdio_evaluator = function(cmd, error_pattern)
+local make_stdio_evaluator = function(cmd, error_pattern, finalizer)
     return function(block, cb, upd)
         upd {
             block = block,
@@ -420,6 +476,7 @@ M.evaluators = {}
 
 M.register_evaluator("identity", identity_evaluator, { "text" })
 M.register_evaluator("lua-nvim", nvim_lua_evaluator, { "lua" })
+M.register_evaluator("math-qalc", qalc_evaluator, { "math" })
 
 M.register_interpreter("lua-system", { "lua", "-" }, {})
 M.register_interpreter("bash", { "bash", "-s" }, {
