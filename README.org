@@ -15,6 +15,7 @@ Simple way to evaluate code blocks in [[https://github.com/nvim-orgmode/orgmode/
 ** Setup
 *** Requirements
 - [[https://github.com/nvim-orgmode/orgmode/tree/master][nvim-orgmode]]
+- [[https://github.com/Qalculate/libqalculate][qalc]] (optional, for math only)
 
 *** Installation
 Any plugin manager should work.
