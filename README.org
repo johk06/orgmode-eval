@@ -64,7 +64,7 @@ Compiles and runs C source code (Note: currently a =main= function is
 necessary)
 **** =bash=, =python=, =lua-system=
 These run their respective scripting languages via =stdin=.
-**** =math-qalc=
+**** =math-qalc= (language =math=)
 Evaluates mathematical expressions using the [[https://github.com/Qalculate/libqalculate][qalc]] command line tool.
 Qalc supports a wide variety of mathematical operations.
 Output is displayed inline.
