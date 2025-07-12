@@ -74,7 +74,9 @@ local show_stages = function(block, result)
         })
     end
 
-    if #block.total_time == 0 or block.last_upd.stage ~= block.total_time[#block.total_time][1] then
+    if block.last_upd and (
+            #block.total_time == 0
+            or block.last_upd.stage ~= block.total_time[#block.total_time][1]) then
         table.insert(message, {
             (" %s..."):format(update_messages[block.last_upd.stage]), opts.highlight
         })

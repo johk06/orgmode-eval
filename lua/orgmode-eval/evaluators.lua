@@ -11,16 +11,18 @@ local sched = vim.schedule_wrap(function(upd, tbl)
     upd(tbl)
 end)
 
----@class OrgEvalBlock
+---@class (exact) OrgEvalArgs
+---@field environ table<string, string>
+---@field clear_environ boolean
+---@field args string[]
+
+---@class (exact) OrgEvalBlock
 ---@field buf integer
 ---@field lnum integer
 ---@field end_lnum integer
 ---@field block OrgBlock
 ---@field lang string
----@field environ table<string, string>
----@field clear_environ boolean
----@field args string[]
----@field output_format "plain"|"terminal"|"image"
+---@field args OrgEvalArgs
 ---@field last_upd OrgEvalUpdate?
 ---@field update_virt_text integer?
 ---@field total_time {[1]: OrgEvalStage, [2]: number}[]?
@@ -121,13 +123,13 @@ do
         end
         ---@cast chunk function
 
-        local env = block.environ --[[@as table]]
+        local env = block.args.environ --[[@as table]]
         local messages = {}
-        if not block.clear_environ then
+        if not block.args.clear_environ then
             package.seeall(env)
         end
         env.print = get_print_handler(messages)
-        env.arg = block.args
+        env.arg = block.args.args
 
 
         setfenv(chunk, env)
@@ -210,11 +212,11 @@ local make_stdio_evaluator = function(cmd, error_pattern)
             time = gettime()
         }
         local full_cmd = vim.list_extend({}, cmd)
-        vim.list_extend(full_cmd, block.args)
+        vim.list_extend(full_cmd, block.args.args)
         vim.system(full_cmd, {
             stdin = block.block:get_content(),
-            clear_env = block.clear_environ,
-            env = not vim.tbl_isempty(block.environ) and block.environ or nil,
+            clear_env = block.args.clear_environ,
+            env = block.args.environ,
         }, function(out)
             ---@type OrgEvalResult
             ---@diagnostic disable-next-line: missing-fields
@@ -274,10 +276,10 @@ end
 ---@param block OrgEvalBlock
 ---@param cb OrgEvalDoneCb
 local execute_program = function(program, block, cb)
-    local command = vim.list_extend({ program }, block.args)
+    local command = vim.list_extend({ program }, block.args.args)
     vim.system(command, {
-        env = block.environ,
-        clear_env = block.clear_environ,
+        env = block.args.environ,
+        clear_env = block.args.clear_environ,
     }, function(out)
         ---@type OrgEvalResult
         ---@diagnostic disable-next-line: missing-fields
