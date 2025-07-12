@@ -30,19 +30,28 @@ end
 local expand_sh_style_var = function(str)
     local out = {}
     local match, len
+    local replacement
+
     if str:sub(1, 1) == "{" then
         local stop = str:find("}")
         len = stop
         match = str:sub(2, stop - 1)
+    elseif str:sub(1, 2) == "?{" then
+        local stop = str:find("}")
+        len = stop + 1
+        local fields = vim.split(str:sub(3, stop - 1), "|")
+        replacement = vim.fn.input((fields[1] or "Entry") .. ": ", fields[3] or "", fields[2])
     else
         match = str:match("^(%w+)")
         len = #match
     end
-    local replacement
-    if match == "FILE" then
-        replacement = api.nvim_buf_get_name(0)
-    else
-        replacement = vim.env[match]
+
+    if not replacement then
+        if match == "FILE" then
+            replacement = api.nvim_buf_get_name(0)
+        else
+            replacement = vim.env[match]
+        end
     end
     return replacement, len
 end

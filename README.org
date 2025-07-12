@@ -77,6 +77,7 @@ shell-like word splitting is applied:
 - =word\ space "word space" 'word space'= will be passed as three identical arguments.
 - =$PATH= or =${PATH}= will insert the literal contents of that environment variable.
 - The special variable =$FILE= will expand to the current file.
+- The special "variable" =$?{prompt|completion}= can be used to prompt for user input
 **** ~:env NAME=VALUE~
 Sets environment variables for external processes.
 Specifying a name without a value causes it to be included from the default environment.
