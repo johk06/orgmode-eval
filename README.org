@@ -58,6 +58,9 @@ Evaluates lua within your current neovim instance,
 so it has access to all your variables and can modify the editor state.
 This may not be desirable for code that sleeps or does work using libuv,
 since that will escape the context used for tracking it.
+**** =vim-nvim=
+Runs vimscript, mainly useful to run commands on the buffer itself.
+With =clear-env=, will try its best to keep the state the same.
 **** =identity=
 Returns the blocks contents verbatim, mainly for testing purposes.
 **** =gcc=

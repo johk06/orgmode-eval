@@ -11,6 +11,24 @@ local sched = vim.schedule_wrap(function(upd, tbl)
     upd(tbl)
 end)
 
+local startrun = function(cb, block)
+    cb {
+        block = block,
+        event = "start",
+        stage = "run",
+        time = gettime()
+    }
+end
+
+local stoprun = function(cb, block)
+    cb {
+        block = block,
+        event = "done",
+        stage = "run",
+        time = gettime()
+    }
+end
+
 ---@class (exact) OrgEvalArgs
 ---@field environ table<string, string>
 ---@field clear_environ boolean
@@ -134,12 +152,7 @@ do
 
 
         setfenv(chunk, env)
-        upd {
-            block = block,
-            event = "start",
-            stage = "run",
-            time = gettime()
-        }
+        startrun(upd, block)
 
         local error_result
         local ok = xpcall(chunk, function(e)
@@ -153,12 +166,7 @@ do
             }
         end)
 
-        upd {
-            block = block,
-            event = "done",
-            stage = "run",
-            time = gettime()
-        }
+        stoprun(upd, block)
 
         if ok then
             cb {
@@ -174,13 +182,45 @@ do
 end
 
 ---@type OrgEvalEvaluator
+local nvim_vimscript_evaluator = function(block, cb, upd)
+    local lines = block.block:get_content()
+    local search, hlsearch, winpos
+    if block.args.clear_environ then
+        search = vim.fn.getreg("/")
+        hlsearch = vim.v.hlsearch
+        winpos = vim.api.nvim_win_get_cursor(0)
+    end
+
+    startrun(upd, block)
+    local ok, res = pcall(vim.api.nvim_exec2, table.concat(lines, "\n"), { output = true })
+    stoprun(upd, block)
+
+    if ok then
+        cb {
+            block = block,
+            result = "ok",
+            stdout = res.output,
+        }
+    else
+        local lnum, msg = res:match("nvim_exec2%(%), line (%d+): (.*)")
+        cb {
+            block = block,
+            result = "error",
+            error_stage = "run",
+            errors = { { lnum, msg } }
+        }
+    end
+
+    if block.args.clear_environ then
+        vim.fn.setreg("/", search)
+        vim.v.hlsearch = hlsearch
+        vim.api.nvim_win_set_cursor(0, winpos)
+    end
+end
+
+---@type OrgEvalEvaluator
 local qalc_evaluator = function(block, cb, upd)
-    upd {
-        block = block,
-        stage = "run",
-        event = "start",
-        time = gettime()
-    }
+    startrun(upd, block)
 
     local lines = block.block:get_content()
     local line_has_result = vim.tbl_map(function(l)
@@ -216,12 +256,7 @@ local qalc_evaluator = function(block, cb, upd)
         end
 
         sched(function()
-            upd {
-                block = block,
-                stage = "run",
-                event = "done",
-                time = gettime()
-            }
+            stoprun(upd, block)
             cb(res)
         end)
     end)
@@ -261,12 +296,7 @@ end
 ---@return OrgEvalEvaluator
 local make_stdio_evaluator = function(cmd, error_pattern, finalizer)
     return function(block, cb, upd)
-        upd {
-            block = block,
-            stage = "run",
-            event = "start",
-            time = gettime()
-        }
+        startrun(upd, block)
         local full_cmd = vim.list_extend({}, cmd)
         vim.list_extend(full_cmd, block.args.args)
         vim.system(full_cmd, {
@@ -297,12 +327,7 @@ local make_stdio_evaluator = function(cmd, error_pattern, finalizer)
             end
 
             vim.schedule(function()
-                upd {
-                    block = block,
-                    stage = "run",
-                    event = "done",
-                    time = gettime()
-                }
+                stoprun(upd, block)
                 cb(res)
             end)
         end)
@@ -476,6 +501,7 @@ M.evaluators = {}
 
 M.register_evaluator("identity", identity_evaluator, { "text" })
 M.register_evaluator("lua-nvim", nvim_lua_evaluator, { "lua" })
+M.register_evaluator("vim-nvim", nvim_vimscript_evaluator, { "vim" })
 M.register_evaluator("math-qalc", qalc_evaluator, { "math" })
 
 M.register_interpreter("lua-system", { "lua", "-" }, {})
