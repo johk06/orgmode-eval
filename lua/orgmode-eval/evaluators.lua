@@ -52,10 +52,10 @@ end
 ---@field result "error"|"ok"
 ---@field error_stage OrgEvalStage?
 ---@field exitcode integer?
----@field stdout (string|string[])?
+---@field stdout (string|string[][])?
 ---@field output_style "plain"|"inline"?
 ---@field stderr (string|string[])?
----@field errors {[1]: integer, [2]: string}[]?
+---@field errors {[1]: integer, [2]: string, [3]: integer?}[]?
 
 ---@class OrgEvalCompilationResult
 ---@field out vim.SystemCompleted
@@ -184,11 +184,11 @@ end
 ---@type OrgEvalEvaluator
 local nvim_vimscript_evaluator = function(block, cb, upd)
     local lines = block.block:get_content()
-    local search, hlsearch, winpos
+    local search, hlsearch, view
     if block.args.clear_environ then
         search = vim.fn.getreg("/")
         hlsearch = vim.v.hlsearch
-        winpos = vim.api.nvim_win_get_cursor(0)
+        view = vim.fn.winsaveview()
     end
 
     startrun(upd, block)
@@ -214,52 +214,8 @@ local nvim_vimscript_evaluator = function(block, cb, upd)
     if block.args.clear_environ then
         vim.fn.setreg("/", search)
         vim.v.hlsearch = hlsearch
-        vim.api.nvim_win_set_cursor(0, winpos)
+        vim.fn.winrestview(view)
     end
-end
-
----@type OrgEvalEvaluator
-local qalc_evaluator = function(block, cb, upd)
-    startrun(upd, block)
-
-    local lines = block.block:get_content()
-    local line_has_result = vim.tbl_map(function(l)
-        return not (l:match("^%s*$") or l:match("^%s*#"))
-    end, lines)
-
-    vim.system({ "qalc", "-t", "-f", "-" }, {
-        stdin = lines,
-    }, function(out)
-        ---@type OrgEvalResult
-        ---@diagnostic disable-next-line: missing-fields
-        local res = {
-            block = block,
-            exitcode = out.code,
-            stderr = out.stderr
-        }
-        if out.code ~= 0 then
-            res.result = "error"
-        else
-            local output = vim.split(out.stdout, "\n")
-            local line_results = {}
-            local index = 1
-            for i, has_res in ipairs(line_has_result) do
-                if has_res then
-                    line_results[i] = "= " .. output[index]
-                    index = index + 1
-                else
-                    line_results[i] = ""
-                end
-            end
-            res.stdout = line_results
-            res.output_style = "inline"
-        end
-
-        sched(function()
-            stoprun(upd, block)
-            cb(res)
-        end)
-    end)
 end
 
 ---@type OrgEvalEvaluator
@@ -502,7 +458,6 @@ M.evaluators = {}
 M.register_evaluator("identity", identity_evaluator, { "text" })
 M.register_evaluator("lua-nvim", nvim_lua_evaluator, { "lua" })
 M.register_evaluator("vim-nvim", nvim_vimscript_evaluator, { "vim" })
-M.register_evaluator("math-qalc", qalc_evaluator, { "math" })
 
 M.register_interpreter("lua-system", { "lua", "-" }, {})
 M.register_interpreter("bash", { "bash", "-s" }, {
@@ -518,6 +473,68 @@ M.register_compiler("gcc", { "gcc", "{input}", "-o", "{output}" }, {
     error_pattern = "^%S-:(%d+):%d+: error: (.*)",
     languages = { "c" }
 })
+
+do
+    local ok, qalculate = pcall(require, "qalculate")
+    if not ok then
+        goto noqalc
+    end
+
+    local qalc = qalculate.new({
+        assing_variables = true,
+        interval_display = "concise"
+    })
+
+    M.register_evaluator("math-qalc", function(block, cb, upd)
+        upd {
+            block = block,
+            event = "start",
+            stage = "run",
+            time = gettime()
+        }
+
+        local lines = block.block:get_content()
+
+        ---@type OrgEvalResult
+        ---@diagnostic disable-next-line: missing-fields
+        local out = {
+            block = block,
+            errors = {},
+            output_style = "inline",
+        }
+
+        ---@type string[][]
+        local stdout = {}
+
+        for i, line in ipairs(lines) do
+            if not line:match("^%s*$") then
+                local res, errs = qalc:eval(line)
+
+                for _, err in ipairs(errs) do
+                    table.insert(out.errors, { i, err[1], err[2] })
+                end
+                table.insert(stdout, {
+                    ("%s %s"):format(res:is_approximate() and "≈" or "=", res:print())
+                })
+            else
+                table.insert(stdout, {})
+            end
+        end
+
+        upd {
+            block = block,
+            event = "done",
+            stage = "run",
+            time = gettime(),
+        }
+
+        out.result = "ok"
+        out.stdout = stdout
+        cb(out)
+    end, { "math", "qalc" })
+
+    ::noqalc::
+end
 -- }}}
 
 ---@param block OrgEvalBlock
