@@ -166,17 +166,19 @@ M.display_evaluation_result = function(res)
             col = 0,
             end_col = node:byte_length(),
         })
-        if res.errors then
-            vim.list_extend(diagnostics, vim.tbl_map(function(e)
-                return {
-                    severity = vim.diagnostic.severity.ERROR,
-                    message = e[2],
-                    lnum = e[1] + block.lnum,
-                    col = 0,
-                }
-            end, res.errors))
-        end
     end
+
+    if res.errors then
+        vim.list_extend(diagnostics, vim.tbl_map(function(e)
+            return {
+                severity = e[3] or vim.diagnostic.severity.ERROR,
+                message = e[2],
+                lnum = e[1] + block.lnum,
+                col = 0,
+            }
+        end, res.errors))
+    end
+
     show_stages(block, res.result)
 
     vim.diagnostic.set(diags, buf, vim.list_extend(vim.tbl_filter(function(d)
@@ -188,16 +190,17 @@ M.display_evaluation_result = function(res)
     end
     if res.stdout and #res.stdout > 0 then
         if res.output_style == "inline" then
-            for i, line in ipairs(res.stdout --[[@as string[] ]]) do
-                local len = vim.fn.strdisplaywidth(line)
-                if len == 0 then
-                elseif len > opts.max_inline_length then
+            for i, chunk in ipairs(res.stdout --[[@as string[][] ]]) do
+                if #chunk == 0 then
+                elseif #chunk > 1 or vim.fn.strdisplaywidth(chunk[1]) > opts.max_inline_length then
                     api.nvim_buf_set_extmark(buf, ns, block.lnum + i, 0, {
-                        virt_lines = { { { padding }, { line, opts.highlight } } },
+                        virt_lines = vim.tbl_map(function(line)
+                            return { { padding }, { line, opts.highlight } }
+                        end, chunk)
                     })
                 else
                     api.nvim_buf_set_extmark(buf, ns, block.lnum + i, 0, {
-                        virt_text = { { line, opts.highlight } },
+                        virt_text = { { chunk[1], opts.highlight } },
                     })
                 end
             end
