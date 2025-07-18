@@ -15,7 +15,7 @@ Simple way to evaluate code blocks in [[https://github.com/nvim-orgmode/orgmode/
 ** Setup
 *** Requirements
 - [[https://github.com/nvim-orgmode/orgmode/tree/master][nvim-orgmode]]
-- [[https://github.com/Qalculate/libqalculate][qalc]] (optional, for math only)
+- [[https://github.com/johk06/libqalculate-lua-nvim][libqalculate-lua-nvim]] (optional, for math only)
 
 *** Installation
 Any plugin manager should work.
@@ -69,7 +69,7 @@ necessary)
 **** =bash=, =python=, =lua-system=
 These run their respective scripting languages via =stdin=.
 **** =math-qalc= (language =math=)
-Evaluates mathematical expressions using the [[https://github.com/Qalculate/libqalculate][qalc]] command line tool.
+Evaluates mathematical expressions using the [[https://github.com/Qalculate/libqalculate][qalc]] library.
 Qalc supports a wide variety of mathematical operations.
 Output is displayed inline.
 
@@ -131,15 +131,14 @@ org_eval.register_compiler("gcc", { "gcc", "{input}", "-o", "{output}" }, {
 #+end_src
 
 **** Custom =OrgEvalEvaluator=
-For full control, simply write a function that implements the
-=OrgEvalEvaluator= type
-and register it using =org_eval.register=.
-Two callbacks will be provided to your function
-(they both need to run in the main neovim event loop, so schedule them using =vim.schedule= if in an =:h api-fast= context):
+For full control, simply write a function that implements the =OrgEvalEvaluator= type and register it using
+=org_eval.register=. Two callbacks will be provided to your function (they both need to run in the main neovim
+event loop, so schedule them using =vim.schedule= if in an =:h api-fast= context):
 ***** =OrgEvalDoneCb=
 Call this function once your evaluator is fully done, this will cause the display of output,
 error messages and total runtime.
 ***** =OrgEvalProgressCb=
 Used to mark at which step in the execution you are and how long the last step took.
 At least one call with ~event = "start"~ and ~event = "done"~ is required to get timings to show up.
-If your evaluator has a multi step process (like a configure-compile-run cycle), those stages can be cleanly delimited.
+If your evaluator has a multi step process (like a configure-compile-run cycle), those stages can be cleanly
+delimited.
