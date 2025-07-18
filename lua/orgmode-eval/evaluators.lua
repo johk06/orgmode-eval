@@ -250,7 +250,7 @@ end
 ---@param cmd string[]
 ---@param error_pattern string? Regex that captures the line and error message
 ---@return OrgEvalEvaluator
-local make_stdio_evaluator = function(cmd, error_pattern, finalizer)
+local make_stdio_evaluator = function(cmd, error_pattern)
     return function(block, cb, upd)
         startrun(upd, block)
         local full_cmd = vim.list_extend({}, cmd)
@@ -481,9 +481,33 @@ do
     end
 
     local qalc = qalculate.new({
-        assing_variables = true,
+        assign_variables = true,
         interval_display = "concise"
     })
+
+    ---@param block QalcExpression
+    ---@return string[]
+    local format_block = function(block)
+        if block:type() == "matrix" then
+            local value = assert(block:as_matrix())
+            local rows, cols = #value, #value[1]
+            local middle = math.floor((rows+1) / 2)
+
+            local lines = {}
+            for i, row in ipairs(value) do
+                table.insert(lines, ("%s%s"):format(
+                    i == middle and (block:is_approximate() and "≈ " or "= ") or "  ",
+                    table.concat(vim.tbl_map(function(el)
+                        return el:print()
+                    end, row), " ")
+                ))
+            end
+
+            return lines
+        else
+            return { ("%s %s"):format(block:is_approximate() and "≈" or "=", block:print()) }
+        end
+    end
 
     M.register_evaluator("math-qalc", function(block, cb, upd)
         upd {
@@ -513,9 +537,7 @@ do
                 for _, err in ipairs(errs) do
                     table.insert(out.errors, { i, err[1], err[2] })
                 end
-                table.insert(stdout, {
-                    ("%s %s"):format(res:is_approximate() and "≈" or "=", res:print())
-                })
+                table.insert(stdout, format_block(res))
             else
                 table.insert(stdout, {})
             end
