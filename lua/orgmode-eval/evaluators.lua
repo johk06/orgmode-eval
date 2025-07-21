@@ -480,10 +480,12 @@ do
         goto noqalc
     end
 
-    local qalc = qalculate.new({
-        assign_variables = true,
-        interval_display = "concise"
-    })
+    local qalc = qalculate.new()
+    ---@type QalcPrintOptions
+    local opts = {
+        interval_display = "concise",
+        unicode = "on",
+    }
 
     ---@param block QalcExpression
     ---@return string[]
@@ -491,7 +493,7 @@ do
         if block:type() == "matrix" then
             local value = assert(block:as_matrix())
             local rows, cols = #value, #value[1]
-            local middle = math.floor((rows+1) / 2)
+            local middle = math.floor((rows + 1) / 2)
 
             local lines = {}
             for i, row in ipairs(value) do
@@ -505,7 +507,9 @@ do
 
             return lines
         else
-            return { ("%s %s"):format(block:is_approximate() and "≈" or "=", block:print()) }
+            return {
+                ("%s %s"):format(block:is_approximate() and "≈" or "=", block:print(opts))
+            }
         end
     end
 
@@ -534,8 +538,10 @@ do
             if not line:match("^%s*$") then
                 local res, errs = qalc:eval(line)
 
-                for _, err in ipairs(errs) do
-                    table.insert(out.errors, { i, err[1], err[2] })
+                if errs then
+                    for _, err in ipairs(errs) do
+                        table.insert(out.errors, { i, err[1], err[2] })
+                    end
                 end
                 table.insert(stdout, format_block(res))
             else
