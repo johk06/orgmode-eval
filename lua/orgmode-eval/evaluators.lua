@@ -55,6 +55,7 @@ end
 ---@field stdout (string|string[][])?
 ---@field output_style "plain"|"inline"?
 ---@field stderr (string|string[])?
+---@field images {[1]: integer, [2]: string}[]?
 ---@field errors {[1]: integer, [2]: string, [3]: integer?}[]?
 
 ---@class OrgEvalCompilationResult
@@ -474,95 +475,9 @@ M.register_compiler("gcc", { "gcc", "{input}", "-o", "{output}" }, {
     languages = { "c" }
 })
 
-do
-    local ok, qalculate = pcall(require, "qalculate")
-    if not ok then
-        goto noqalc
-    end
-
-    local qalc = qalculate.new()
-    ---@type QalcPrintOptions
-    local opts = {
-        interval_display = "concise",
-        unicode = "on",
-    }
-
-    ---@param block QalcExpression
-    ---@return string[]
-    local format_block = function(block)
-        if block:type() == "matrix" then
-            local value = assert(block:as_matrix())
-            local rows, cols = #value, #value[1]
-            local middle = math.floor((rows + 1) / 2)
-
-            local lines = {}
-            for i, row in ipairs(value) do
-                table.insert(lines, ("%s%s"):format(
-                    i == middle and (block:is_approximate() and "≈ " or "= ") or "  ",
-                    table.concat(vim.tbl_map(function(el)
-                        return el:print()
-                    end, row), " ")
-                ))
-            end
-
-            return lines
-        else
-            return {
-                ("%s %s"):format(block:is_approximate() and "≈" or "=", block:print(opts))
-            }
-        end
-    end
-
-    M.register_evaluator("math-qalc", function(block, cb, upd)
-        upd {
-            block = block,
-            event = "start",
-            stage = "run",
-            time = gettime()
-        }
-
-        local lines = block.block:get_content()
-
-        ---@type OrgEvalResult
-        ---@diagnostic disable-next-line: missing-fields
-        local out = {
-            block = block,
-            errors = {},
-            output_style = "inline",
-        }
-
-        ---@type string[][]
-        local stdout = {}
-
-        for i, line in ipairs(lines) do
-            if not line:match("^%s*$") then
-                local res, errs = qalc:eval(line)
-
-                if errs then
-                    for _, err in ipairs(errs) do
-                        table.insert(out.errors, { i, err[1], err[2] })
-                    end
-                end
-                table.insert(stdout, format_block(res))
-            else
-                table.insert(stdout, {})
-            end
-        end
-
-        upd {
-            block = block,
-            event = "done",
-            stage = "run",
-            time = gettime(),
-        }
-
-        out.result = "ok"
-        out.stdout = stdout
-        cb(out)
-    end, { "math", "qalc" })
-
-    ::noqalc::
-end
+vim.defer_fn(function ()
+   require("orgmode-eval.qalculate_evaluator")
+end, 100)
 -- }}}
 
 ---@param block OrgEvalBlock

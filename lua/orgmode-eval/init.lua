@@ -5,6 +5,7 @@ local api = vim.api
 local parser = require("orgmode-eval.parser")
 local eval = require("orgmode-eval.evaluators")
 local ui = require("orgmode-eval.ui")
+local util = require("orgmode-eval.util")
 
 M.run_code_block = function()
     local block = parser.get_parsed_current_block()
@@ -19,6 +20,7 @@ M.clear_buffer = function(buf)
 
     vim.diagnostic.set(ui.diagnostics, buf, {})
     api.nvim_buf_clear_namespace(buf, ui.highlights, 0, -1)
+    util.clear_images(buf)
 end
 
 M.setup = require("orgmode-eval.opts").setup

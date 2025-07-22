@@ -2,11 +2,13 @@ local M = {}
 
 local api = vim.api
 local opts = require("orgmode-eval.opts").config.output
+local util = require("orgmode-eval.util")
 
 local ns = api.nvim_create_namespace("org.evaluator.highlights")
 M.highlights = ns
 local diags = api.nvim_create_namespace("org.evaluator.diagnostics")
 M.diagnostics = diags
+
 
 
 ---@param node TSNode
@@ -211,5 +213,17 @@ M.display_evaluation_result = function(res)
     api.nvim_buf_set_extmark(buf, ns, block.end_lnum - 1, 0, {
         virt_lines = lines
     })
+    if res.images and util.has_image then
+        util.clear_images(block.buf)
+        for i, img in ipairs(res.images) do
+            util.image.from_file(img[2], {
+                window = api.nvim_get_current_win(),
+                y = block.lnum + img[1],
+                with_virtual_padding = true,
+                namespace = "orgmode-eval",
+                buffer = block.buf
+            }):render()
+        end
+    end
 end
 return M
