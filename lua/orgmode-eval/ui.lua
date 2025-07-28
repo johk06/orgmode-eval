@@ -192,16 +192,19 @@ M.display_evaluation_result = function(res)
     end
     if res.stdout and #res.stdout > 0 then
         if res.output_style == "inline" then
-            for i, chunk in ipairs(res.stdout --[[@as string[][] ]]) do
+            for _, item in ipairs(res.stdout --[[@as {[1]: integer, [2]: string} ]]) do
+                local line = item[1]
+                local chunk = item[2]
+
                 if #chunk == 0 then
                 elseif #chunk > 1 or vim.fn.strdisplaywidth(chunk[1]) > opts.max_inline_length then
-                    api.nvim_buf_set_extmark(buf, ns, block.lnum + i, 0, {
-                        virt_lines = vim.tbl_map(function(line)
-                            return { { padding }, { line, opts.highlight } }
+                    api.nvim_buf_set_extmark(buf, ns, block.lnum + line, 0, {
+                        virt_lines = vim.tbl_map(function(l)
+                            return { { padding }, { l, opts.highlight } }
                         end, chunk)
                     })
                 else
-                    api.nvim_buf_set_extmark(buf, ns, block.lnum + i, 0, {
+                    api.nvim_buf_set_extmark(buf, ns, block.lnum + line, 0, {
                         virt_text = { { chunk[1], opts.highlight } },
                     })
                 end
@@ -215,7 +218,7 @@ M.display_evaluation_result = function(res)
     })
     if res.images and util.has_image then
         util.clear_images(block.buf)
-        for i, img in ipairs(res.images) do
+        for _, img in ipairs(res.images) do
             util.image.from_file(img[2], {
                 window = api.nvim_get_current_win(),
                 y = block.lnum + img[1],

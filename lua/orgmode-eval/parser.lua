@@ -184,7 +184,8 @@ M.get_parsed_current_block = function()
         args = {
             args = args[":args"] and parse_arg_vector(args[":args"]) or {},
             environ = args[":env"] and parse_env_vector(args[":env"]) or {},
-            clear_environ = parse_arg_bool(args[":clear-env"], false)
+            clear_environ = parse_arg_bool(args[":clear-env"], false),
+            inline = parse_arg_bool(args[":inline"], false),
         }
     }
 

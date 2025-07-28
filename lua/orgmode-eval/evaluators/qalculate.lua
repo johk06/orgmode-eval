@@ -2,12 +2,11 @@ local has_qalc, qalculate = pcall(require, "qalculate")
 if not has_qalc then
     return
 end
-local gettime = require("orgmode-eval.util").gettime
 
+local gettime = require("orgmode-eval.util").gettime
 local strbuf = require("string.buffer")
 
 local cur_img
-
 local getrgb = function(hlgroup, field)
     local value = vim.api.nvim_get_hl(0, {
         name = hlgroup,
@@ -22,8 +21,6 @@ local qalc = qalculate.new(function(x, y, meta)
     for i = 1, #x do
         values:putf("%f %f\n", x[i], y[i])
     end
-
-    vim.notify(vim.inspect(meta))
 
     local directives = strbuf.new()
     if meta.step then
@@ -91,7 +88,6 @@ local format_block = function(block)
     end
 end
 
-
 require("orgmode-eval.evaluators").register_evaluator("math-qalc", function(block, cb, upd)
     upd {
         block = block,
@@ -131,9 +127,7 @@ require("orgmode-eval.evaluators").register_evaluator("math-qalc", function(bloc
                     table.insert(out.errors, { i, err[1], err[2] })
                 end
             end
-            table.insert(stdout, format_block(res))
-        else
-            table.insert(stdout, {})
+            table.insert(stdout, { i, format_block(res)})
         end
     end
 

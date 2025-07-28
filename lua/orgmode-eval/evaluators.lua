@@ -29,159 +29,6 @@ local stoprun = function(cb, block)
     }
 end
 
----@class (exact) OrgEvalArgs
----@field environ table<string, string>
----@field clear_environ boolean
----@field args string[]
-
----@class (exact) OrgEvalBlock
----@field buf integer
----@field lnum integer
----@field end_lnum integer
----@field block OrgBlock
----@field lang string
----@field args OrgEvalArgs
----@field last_upd OrgEvalUpdate?
----@field update_virt_text integer?
----@field total_time {[1]: OrgEvalStage, [2]: number}[]?
-
----@alias OrgEvalStage "prepare"|"compile"|"run"
-
----@class OrgEvalResult
----@field block OrgEvalBlock
----@field result "error"|"ok"
----@field error_stage OrgEvalStage?
----@field exitcode integer?
----@field stdout (string|string[][])?
----@field output_style "plain"|"inline"?
----@field stderr (string|string[])?
----@field images {[1]: integer, [2]: string}[]?
----@field errors {[1]: integer, [2]: string, [3]: integer?}[]?
-
----@class OrgEvalCompilationResult
----@field out vim.SystemCompleted
----@field tmpdir string
----@field program string
-
----@class OrgEvalUpdate
----@field block OrgEvalBlock
----@field event "start"|"done"
----@field stage OrgEvalStage
----@field time number
-
----@alias OrgEvalDoneCb fun(res: OrgEvalResult)
----@alias OrgEvalProgressCb fun(res: OrgEvalUpdate)
----@alias OrgEvalEvaluator fun(block: OrgEvalBlock, cb: OrgEvalDoneCb, upd: OrgEvalProgressCb)
-
----@type OrgEvalEvaluator
-local nvim_lua_evaluator
-do
-    local get_print_handler = function(dest)
-        return function(...)
-            local as_str = table.concat(vim.tbl_map(function(v)
-                return type(v) == "string" and v or vim.inspect((v))
-            end, { ... }), " ")
-
-            vim.list_extend(dest, vim.split(as_str, "\n"))
-        end
-    end
-
-    local get_error_handler = function(name)
-        ---@param err string
-        return function(err)
-            if err then
-                local line, msg = err:match("^" .. vim.pesc(name) .. ":(%d+):(.*)")
-                if line then
-                    return line, msg
-                end
-            end
-
-            for lvl = 2, 20 do
-                local info = debug.getinfo(lvl, "Sln")
-                if info and info.source == "@" .. name then
-                    return info.currentline, err
-                end
-            end
-        end
-    end
-
-    ---@type OrgEvalEvaluator
-    nvim_lua_evaluator = function(block, cb, upd)
-        local source = table.concat(block.block:get_content(), "\n")
-        local chunk_name = block.block:get_name() or "Lua"
-
-        upd {
-            event = "start",
-            stage = "prepare",
-            time = gettime(),
-            block = block,
-        }
-        local on_error = get_error_handler(chunk_name)
-        local chunk, err = load(source, "@" .. chunk_name)
-
-        local load_error
-        if not chunk then
-            local lnum, msg = on_error(err --[[@as string]])
-            load_error = {
-                result = "error",
-                error_stage = "compile",
-                errors = { { tonumber(lnum), msg } },
-                block = block,
-            }
-        end
-
-        upd {
-            event = "done",
-            stage = "prepare",
-            time = gettime(),
-            block = block,
-        }
-
-        if load_error then
-            cb(load_error)
-            return
-        end
-        ---@cast chunk function
-
-        local env = block.args.environ --[[@as table]]
-        local messages = {}
-        if not block.args.clear_environ then
-            package.seeall(env)
-        end
-        env.print = get_print_handler(messages)
-        env.arg = block.args.args
-
-
-        setfenv(chunk, env)
-        startrun(upd, block)
-
-        local error_result
-        local ok = xpcall(chunk, function(e)
-            local lnum, msg = on_error(e)
-            error_result = {
-                result = "error",
-                error_stage = "run",
-                block = block,
-                stdout = messages,
-                errors = { { lnum, msg } },
-            }
-        end)
-
-        stoprun(upd, block)
-
-        if ok then
-            cb {
-
-                block = block,
-                result = "ok",
-                stdout = messages,
-            }
-        else
-            cb(error_result)
-        end
-    end
-end
-
 ---@type OrgEvalEvaluator
 local nvim_vimscript_evaluator = function(block, cb, upd)
     local lines = block.block:get_content()
@@ -457,7 +304,7 @@ end
 M.evaluators = {}
 
 M.register_evaluator("identity", identity_evaluator, { "text" })
-M.register_evaluator("lua-nvim", nvim_lua_evaluator, { "lua" })
+M.register_evaluator("lua-nvim", require("orgmode-eval.evaluators.nvim-lua"), { "lua" })
 M.register_evaluator("vim-nvim", nvim_vimscript_evaluator, { "vim" })
 
 M.register_interpreter("lua-system", { "lua", "-" }, {})
@@ -476,7 +323,7 @@ M.register_compiler("gcc", { "gcc", "{input}", "-o", "{output}" }, {
 })
 
 vim.defer_fn(function ()
-   require("orgmode-eval.qalculate_evaluator")
+   require("orgmode-eval.evaluators.qalculate")
 end, 100)
 -- }}}
 
